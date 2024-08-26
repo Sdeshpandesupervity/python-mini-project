@@ -27,7 +27,7 @@ steps:
     configMode: 'manual'
     cliProjectKey: 'Infra-Test_Infra-Test_925dc69a-6aa8-40cd-8ff4-4b5b537f42f9'
     cliSources: '.'
-- task: pythonbuild
+
 - script: |
     python -m pip install -r requirements.txt
     python setup.py build
