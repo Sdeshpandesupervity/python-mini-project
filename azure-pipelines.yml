@@ -4,39 +4,50 @@ trigger:
 pool:
   vmImage: ubuntu-latest
 
-jobs:
-- job: SonarQubeAnalysis
-  steps:
-  - task: UsePythonVersion@0
-    inputs:
-      versionSpec: '3.x'
-      addToPath: true
+variables:
+  # Define variables for SonarQube
+  SONARQUBE_PROJECT_KEY: 'your-project-key'  # Set this as needed
+  SONARQUBE_URL: 'https://sonar-dev.supervity.ai'
+  SONARQUBE_TOKEN: '-sqa_621f69d3290cb9967ec7da221c1edfd093d75c24'
 
-  - script: |
-      # Install SonarQube Scanner
-      curl -o sonarqube-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.7.0.2747-linux.zip
-      unzip sonarqube-scanner-cli-4.7.0.2747-linux.zip
-      export PATH=$PATH:$(pwd)/sonar-scanner-4.7.0.2747-linux/bin
-    displayName: 'Install SonarQube Scanner'
+steps:
 
-  - task: SonarQubePrepare@6
-    inputs:
-      SonarQube: 'SonarQube'
-      scannerMode: 'CLI'
-      configMode: 'manual'
-      cliProjectKey: 'Infra-Test_Infra-Test_925dc69a-6aa8-40cd-8ff4-4b5b537f42f9'
-      cliSources: '.'
+# 1. Use the desired Python version
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '3.x'
+    addToPath: true
 
-  - script: |
-      # Install dependencies and build Python project
-      python -m pip install -r requirements.txt
-      python setup.py build
-    displayName: 'Build Python Project'
+# 2. Install Python dependencies and build the project
+- script: |
+    echo "Installing Python dependencies..."
+    python -m pip install --upgrade pip
+    python -m pip install -r requirements.txt
+    python setup.py build
+  displayName: 'Install Dependencies and Build Project'
+  workingDirectory: 'path/to/your/project'  # Update this if necessary
 
-  - task: SonarQubeAnalyze@6
-    inputs:
-      jdkversion: 'JAVA_HOME_17_X64'
+# 3. Prepare SonarQube for analysis
+- task: SonarQubePrepare@6
+  inputs:
+    SonarQube: 'SonarQube'  # This should match the name of the SonarQube service connection in Azure DevOps
+    scannerMode: 'CLI'
+    configMode: 'manual'
+    cliProjectKey: $(SONARQUBE_PROJECT_KEY)
+    cliSources: '.'
+    extraProperties: |
+      sonar.host.url=$(SONARQUBE_URL)
+      sonar.login=$(SONARQUBE_TOKEN)
+  displayName: 'Prepare SonarQube Analysis'
 
-  - task: SonarQubePublish@6
-    inputs:
-      pollingTimeoutSec: '300'
+# 4. Run SonarQube analysis
+- task: SonarQubeAnalyze@6
+  inputs:
+    jdkversion: 'JAVA_HOME_17_X64'
+  displayName: 'Run SonarQube Analysis'
+
+# 5. Publish SonarQube results
+- task: SonarQubePublish@6
+  inputs:
+    pollingTimeoutSec: '300'
+  displayName: 'Publish SonarQube Quality Gate Result'
