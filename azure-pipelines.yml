@@ -4,35 +4,34 @@ trigger:
 pool:
   vmImage: ubuntu-latest
 
-jobs:
-- job: SonarQubeAnalysis
-  steps:
-  - task: UsePythonVersion@0
-    inputs:
-      versionSpec: '3.x'
-      addToPath: true
+steps:
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '3.x'
+    addToPath: true
 
-  - script: |
-      # Install SonarQube Scanner
-      curl -o sonarqube-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.7.0.2747-linux.zip
-      unzip sonar-scanner-cli-4.7.0.2747-linux.zip
-      export PATH=$PATH:$(pwd)/sonar-scanner-4.7.0.2747-linux/bin
-    displayName: 'Install SonarQube Scanner'
-  
-  - task: SonarQubePrepare@6
-    inputs:
-      SonarQube: 'SonarQube'
-      scannerMode: 'CLI'
-      configMode: 'manual'
-      cliProjectKey: 'Infra-Test_Infra-Test_925dc69a-6aa8-40cd-8ff4-4b5b537f42f9'
-      cliSources: '.'
+- script: |
+    # Install dependencies and build Python project
+    python -m pip install --upgrade pip
+    python -m pip install -r requirements.txt
+    python setup.py build
+  displayName: 'Install Dependencies and Build Project'
 
+- task: SonarQubePrepare@6
+  inputs:
+    SonarQube: 'SonarQube'
+    scannerMode: 'CLI'
+    configMode: 'manual'
+    cliProjectKey: 'Infra-Test_Infra-Test_925dc69a-6aa8-40cd-8ff4-4b5b537f42f9'
+    cliSources: '.'
+    extraProperties: |
+      sonar.host.url=$(SONARQUBE_URL)
+      sonar.login=$(SONARQUBE_TOKEN)
 
+- task: SonarQubeAnalyze@6
+  inputs:
+    jdkversion: 'JAVA_HOME_17_X64'
 
-  - task: SonarQubeAnalyze@6
-    inputs:
-      jdkversion: 'JAVA_HOME_21_X64'
-
-  - task: SonarQubePublish@6
-    inputs:
-      pollingTimeoutSec: '300'
+- task: SonarQubePublish@6
+  inputs:
+    pollingTimeoutSec: '300'
