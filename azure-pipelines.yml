@@ -8,7 +8,9 @@ variables:
   SONARQUBE_PROJECT_KEY: 'Infra-Test_Infra-Test_925dc69a-6aa8-40cd-8ff4-4b5b537f42f9'
   SONARQUBE_PROJECT_NAME: 'python-mini-project'
   SONARQUBE_PROJECT_VERSION: '1.0'
-  SONARQUBE_SERVICE_CONNECTION: 'sonarqube'  # Name of the SonarQube service connection in Azure DevOps
+  SONARQUBE_SERVICE_CONNECTION: 'sonarqube'
+  SONARQUBE_URL: 'http://sonar-dev.supervity.ai'  # Update with your SonarQube URL
+  SONARQUBE_TOKEN: 'sqa_18ca7a4a75620b175378099dc7730a1eddf2a3b6'             # Update with your SonarQube token
   BUILD_SOURCESDIRECTORY: $(Build.SourcesDirectory)
 
 stages:
@@ -18,11 +20,20 @@ stages:
   - job: Analyze
     displayName: 'Analyze'
     steps:
-    # Step 1: Checkout code from the repository
     - checkout: self
       persistCredentials: true
 
-    # Step 2: Prepare SonarQube analysis
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.x'
+        addToPath: true
+
+    - script: |
+        python -m pip install --upgrade pip
+        python -m pip install -r requirements.txt
+        python setup.py build
+      displayName: 'Install Dependencies and Build Project'
+
     - task: SonarQubePrepare@6
       inputs:
         SonarQube: $(SONARQUBE_SERVICE_CONNECTION)
@@ -33,15 +44,13 @@ stages:
         extraProperties: |
           sonar.projectName=$(SONARQUBE_PROJECT_NAME)
           sonar.projectVersion=$(SONARQUBE_PROJECT_VERSION)
-          sonar.host.url=$(SONARQUBE_URL)  # URL of your SonarQube server
-          sonar.login=$(SONARQUBE_TOKEN)   # SonarQube authentication token
+          sonar.host.url=$(SONARQUBE_URL)
+          sonar.login=$(SONARQUBE_TOKEN)
 
-    # Step 3: Run SonarQube analysis
     - task: SonarQubeAnalyze@6
       inputs:
         jdkversion: 'JAVA_HOME_17_X64'
 
-    # Step 4: Publish SonarQube Quality Gate results
     - task: SonarQubePublish@6
       inputs:
         pollingTimeoutSec: '300'
