@@ -12,34 +12,20 @@ variables:
   BUILD_SOURCESDIRECTORY: $(Build.SourcesDirectory)
 
 stages:
-- stage: 'SonarQubeAnalysis'
+- stage: SonarQubeAnalysis
   displayName: 'SonarQube Analysis'
   jobs:
-  - job: 'Analyze'
+  - job: Analyze
     displayName: 'Analyze'
     steps:
-    
-    # Step 1: Checkout code from GitHub
+    # Step 1: Checkout code from the repository
     - checkout: self
       persistCredentials: true
-    
-    # Step 2: Set up Python environment (or adapt to your project's language)
-    - task: UsePythonVersion@0
-      inputs:
-        versionSpec: '3.x'
-        addToPath: true
 
-    # Step 3: Install dependencies and build the project
-    - script: |
-        python -m pip install --upgrade pip
-        python -m pip install -r requirements.txt
-        python setup.py build
-      displayName: 'Install Dependencies and Build Project'
-    
-    # Step 4: Prepare SonarQube analysis
+    # Step 2: Prepare SonarQube analysis
     - task: SonarQubePrepare@6
       inputs:
-        SonarQube: $(SONARQUBE_SERVICE_CONNECTION)  # Use the service connection name
+        SonarQube: $(SONARQUBE_SERVICE_CONNECTION)
         scannerMode: 'CLI'
         configMode: 'manual'
         cliProjectKey: $(SONARQUBE_PROJECT_KEY)
@@ -47,16 +33,15 @@ stages:
         extraProperties: |
           sonar.projectName=$(SONARQUBE_PROJECT_NAME)
           sonar.projectVersion=$(SONARQUBE_PROJECT_VERSION)
-          sonar.host.url=$(SONARQUBE_URL)  # Replace with the URL of your SonarQube server
-          sonar.login=$(SONARQUBE_TOKEN)   # Replace with your SonarQube authentication token
-    
-    # Step 5: Run SonarQube analysis
+          sonar.host.url=$(SONARQUBE_URL)  # URL of your SonarQube server
+          sonar.login=$(SONARQUBE_TOKEN)   # SonarQube authentication token
+
+    # Step 3: Run SonarQube analysis
     - task: SonarQubeAnalyze@6
       inputs:
-        jdkversion: 'JAVA_HOME_17_X64'  # Java version compatible with SonarQube
-    
-    # Step 6: Publish SonarQube Quality Gate results
+        jdkversion: 'JAVA_HOME_17_X64'
+
+    # Step 4: Publish SonarQube Quality Gate results
     - task: SonarQubePublish@6
       inputs:
-        pollingTimeoutSec: '300'  # Time to wait for the SonarQube quality gate to complete
-
+        pollingTimeoutSec: '300'
