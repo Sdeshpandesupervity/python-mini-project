@@ -6,9 +6,9 @@ pool:
 
 variables:
   # Define variables for SonarQube
-  SONARQUBE_PROJECT_KEY: 'your-project-key'  # Set this as needed
+  SONARQUBE_PROJECT_KEY: 'Infra-Test_Infra-Test_925dc69a-6aa8-40cd-8ff4-4b5b537f42f9'  # Set this as needed
   SONARQUBE_URL: 'https://sonar-dev.supervity.ai'
-  SONARQUBE_TOKEN: '-sqa_621f69d3290cb9967ec7da221c1edfd093d75c24'
+  SONARQUBE_TOKEN: 'sqa_18ca7a4a75620b175378099dc7730a1eddf2a3b6'
 
 steps:
 
