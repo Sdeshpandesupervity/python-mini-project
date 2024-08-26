@@ -10,7 +10,7 @@ variables:
   SONARQUBE_PROJECT_VERSION: '1.0'
   SONARQUBE_SERVICE_CONNECTION: 'sonarqube'
   SONARQUBE_URL: 'http://sonar-dev.supervity.ai'  # Update with your SonarQube URL
-  SONARQUBE_TOKEN: 'sqa_18ca7a4a75620b175378099dc7730a1eddf2a3b6'             # Update with your SonarQube token
+  SONARQUBE_TOKEN: 'sqa_18ca7a4a75620b175378099dc7730a1eddf2a3b6'  # Update with your SonarQube token
   BUILD_SOURCESDIRECTORY: $(Build.SourcesDirectory)
 
 stages:
@@ -30,8 +30,8 @@ stages:
 
     - script: |
         python -m pip install --upgrade pip
-        python -m pip install -r requirements.txt
-        python setup.py build
+        python -m pip install -r $(BUILD_SOURCESDIRECTORY)/requirements.txt
+        python $(BUILD_SOURCESDIRECTORY)/setup.py build
       displayName: 'Install Dependencies and Build Project'
 
     - task: SonarQubePrepare@6
