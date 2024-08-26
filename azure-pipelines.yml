@@ -15,7 +15,7 @@ jobs:
   - script: |
       # Install SonarQube Scanner
       curl -o sonarqube-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.7.0.2747-linux.zip
-      unzip sonarqube-scanner-cli-4.7.0.2747-linux.zip
+      unzip sonar-scanner-cli-4.7.0.2747-linux.zip
       export PATH=$PATH:$(pwd)/sonar-scanner-4.7.0.2747-linux/bin
     displayName: 'Install SonarQube Scanner'
 
@@ -28,7 +28,18 @@ jobs:
       cliSources: '.'
 
   - script: |
+      # Debugging: List directory contents and check Python version
+      echo "Directory contents:"
+      ls -la
+      echo "Python version:"
+      python --version
+      echo "Pip version:"
+      pip --version
+    displayName: 'Debug Environment'
+
+  - script: |
       # Install dependencies and build Python project
+      python -m pip install --upgrade pip
       python -m pip install -r requirements.txt
       python setup.py build
     displayName: 'Build Python Project'
