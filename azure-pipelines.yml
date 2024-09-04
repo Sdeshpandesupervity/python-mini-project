@@ -29,7 +29,7 @@ jobs:
     # Install project dependencies
     - script: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        pip install -r requirments.txt
       displayName: 'Install dependencies'
 
     # Download and Install SonarQube Scanner
@@ -59,6 +59,8 @@ jobs:
 
     # Run SonarQube Analysis
     - task: SonarQubeAnalyze@6
+      inputs:
+        jdkversion: 'JAVA_HOME_17_X64'
       displayName: 'Run SonarQube Analysis'
 
     # Publish the results
