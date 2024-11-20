@@ -1,70 +1,183 @@
-trigger:
-- main
-
 pool:
   vmImage: 'ubuntu-latest'
 
 variables:
-  SONARQUBE_SERVER: 'https://sonar-dev.supervity.ai'
-  SONARQUBE_TOKEN: 'sqa_18ca7a4a75620b175378099dc7730a1eddf2a3b6'
-  SONAR_PROJECT_KEY: 'python-test'
-  SONAR_PROJECT_NAME: 'python-test'
-  SONAR_PROJECT_VERSION: '1.0'
+  - group: StorageVariables # Includes defectDojoUrl, defectDojoToken, azureStorageConnectionString, etc.
+  - name: SONARQUBE_SERVER
+    value: 'http://4.240.124.40:9000/'
+stages:
+  # SonarQube Analysis Stage
+  - stage: SonarQubeAnalysis
+    displayName: 'SonarQube Analysis'
+    jobs:
+      - job: Analyze
+        displayName: 'Run SonarQube Analysis'
+        steps:
+          - checkout: self
+            fetchDepth: 0
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '3.x'
+              addToPath: true
+          - script: |
+              python -m pip install --upgrade pip
+              pip install -r requirements.txt
+          - script: |
+              wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-6.1.0.4477-linux.zip
+              unzip sonar-scanner-cli-6.1.0.4477-linux.zip
+              export PATH=$(pwd)/sonar-scanner-*/bin:$PATH
+          - task: SonarQubePrepare@6
+            inputs:
+              SonarQube: 'sonarqube'
+              scannerMode: 'CLI'
+              configMode: 'manual'
+              cliProjectKey: 'python-test'
+              cliSources: '.'
+              extraProperties: |
+                sonar.projectVersion=1.0
+                sonar.host.url=$(SONARQUBE_SERVER)
+                sonar.login=$(SONARQUBE_TOKEN)
+                sonar.python.version=3.7,3.8,3.9
+          - task: SonarQubeAnalyze@6
+          - task: SonarQubePublish@6
+            inputs:
+              pollingTimeoutSec: '300'
+          - script: |
+              curl -X POST -H "Authorization: Token $(defectDojoToken)" \
+                   -F 'scan_type=SonarQube Scan' \
+                   -F "file=@$(Build.ArtifactStagingDirectory)/sonarqube-report.json" \
+                   -F "engagement=$(engagementIdSonarQube)" \
+                   -F 'active=true' \
+                   -F 'verified=true' \
+                   "$(defectDojoUrl)"
+          - task: AzureCLI@2
+            inputs:
+              azureSubscription: 'az-storageaccount-access-test'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az storage blob upload \
+                  --account-name viswajithcloudshellsa \
+                  --container-name test \
+                  --file $(Build.ArtifactStagingDirectory)/sonarqube-report.json \
+                  --name sonarqube-report.json \
+                  --overwrite \
+                  --connection-string $(AZURE_STORAGE_CONNECTION_STRING)
 
-jobs:
-- job: SonarQubeAnalysis
-  displayName: 'SonarQube Analysis for Python Project'
-  steps:
-    # Checkout the code
-    - checkout: self
-      fetchDepth: 0  # Ensure full repo history is available for analysis
+  # Trivy Repository Scan Stage
+  - stage: TrivyRepoScan
+    displayName: 'Trivy Repository Scan'
+    jobs:
+      - job: RepoScan
+        displayName: 'Scan Repository with Trivy'
+        steps:
+          - script: |
+              sudo apt-get install -y wget
+              wget https://github.com/aquasecurity/trivy/releases/download/v0.33.0/trivy_0.33.0_Linux-64bit.deb
+              sudo dpkg -i trivy_0.33.0_Linux-64bit.deb
+          - script: |
+              trivy fs --exit-code 0 --severity CRITICAL,HIGH,LOW --format json --output $(Build.ArtifactStagingDirectory)/trivy-repo-sbom.json .
+          - script: |
+              curl -X POST -H "Authorization: Token $(defectDojoToken)" \
+                   -F 'scan_type=Trivy Scan' \
+                   -F "file=@$(Build.ArtifactStagingDirectory)/trivy-repo-sbom.json" \
+                   -F "engagement=$(engagementIdTrivyRepo)" \
+                   -F 'active=true' \
+                   -F 'verified=true' \
+                   "$(defectDojoUrl)"
+          - task: AzureCLI@2
+            inputs:
+              azureSubscription: 'az-storageaccount-access-test'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az storage blob upload \
+                  --account-name viswajithcloudshellsa \
+                  --container-name test \
+                  --file $(Build.ArtifactStagingDirectory)/trivy-repo-sbom.json \
+                  --name trivy-repo-sbom.json \
+                  --overwrite \
+                  --connection-string $(AZURE_STORAGE_CONNECTION_STRING)
 
-    # Set up Python
-    - task: UsePythonVersion@0
-      inputs:
-        versionSpec: '3.x'
-        addToPath: true
-      displayName: 'Set up Python'
+  # OWASP Dependency Check Stage
+  - stage: OWASPDependencyCheck
+    displayName: 'OWASP Dependency Check'
+    dependsOn: TrivyRepoScan
+    jobs:
+      - job: DependencyCheck
+        displayName: 'Run OWASP Dependency Check'
+        steps:
+          - script: |
+              wget https://github.com/jeremylong/DependencyCheck/releases/download/v10.0.4/dependency-check-10.0.4-release.zip
+              unzip dependency-check-10.0.4-release.zip -d dependency-check
+              chmod +x dependency-check/bin/dependency-check.sh
+              export PATH=$(pwd)/dependency-check/bin:$PATH
+              echo "nvd.api.key=$(NVD_API_KEY)" > dependency-check.properties
+          - script: |
+              dependency-check/bin/dependency-check.sh \
+              --project "pygoat-python" \
+              --out "$(Build.SourcesDirectory)/dependency-check-report" \
+              --scan "$(Build.SourcesDirectory)" \
+              --format JSON
+          - script: |
+              curl -X POST -H "Authorization: Token $(defectDojoToken)" \
+                   -F 'scan_type=Dependency Check Scan' \
+                   -F "file=@$(Build.SourcesDirectory)/dependency-check-report/dependency-check-report.json" \
+                   -F "engagement=$(engagementIdDependencyCheck)" \
+                   -F 'active=true' \
+                   -F 'verified=true' \
+                   "$(defectDojoUrl)"
+          - task: AzureCLI@2
+            inputs:
+              azureSubscription: 'az-storageaccount-access-test'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az storage blob upload \
+                  --account-name viswajithcloudshellsa \
+                  --container-name test \
+                  --file $(Build.SourcesDirectory)/dependency-check-report/dependency-check-report.json \
+                  --name dependency-check-report.json \
+                  --overwrite \
+                  --connection-string $(AZURE_STORAGE_CONNECTION_STRING)
 
-    # Install project dependencies
-    - script: |
-        python -m pip install --upgrade pip
-        pip install -r requirments.txt
-      displayName: 'Install dependencies'
-
-    # Download and Install SonarQube Scanner
-    - script: |
-        wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.6.2.2472-linux.zip
-        unzip sonar-scanner-cli-4.6.2.2472-linux.zip
-        export PATH=$PATH:$(pwd)/sonar-scanner-4.6.2.2472-linux/bin
-        echo "SonarQube Scanner installed at: $(pwd)/sonar-scanner-4.6.2.2472-linux/bin"
-        echo "Current PATH: $PATH"
-      displayName: 'Install SonarQube Scanner'
-
-    # Prepare SonarQube analysis
-    - task: SonarQubePrepare@6
-      inputs:
-        SonarQube: 'sonarqube'  # Name of the SonarQube service connection in Azure DevOps
-        scannerMode: 'CLI'
-        configMode: 'manual'
-        cliProjectKey: '$(SONAR_PROJECT_KEY)'
-        cliProjectName: '$(SONAR_PROJECT_NAME)'
-        cliSources: '.'
-        extraProperties: |
-          sonar.projectVersion=$(SONAR_PROJECT_VERSION)
-          sonar.host.url=$(SONARQUBE_SERVER)
-          sonar.login=$(SONARQUBE_TOKEN)
-          sonar.python.version=3.x
-      displayName: 'Prepare SonarQube Analysis'
-
-    # Run SonarQube Analysis
-    - task: SonarQubeAnalyze@6
-      inputs:
-        jdkversion: 'JAVA_HOME_17_X64'
-      displayName: 'Run SonarQube Analysis'
-
-    # Publish the results
-    - task: SonarQubePublish@6
-      inputs:
-        pollingTimeoutSec: '300'
-      displayName: 'Publish Quality Gate Result'
+  # Trivy Image Scan Stage
+  - stage: TrivyImageScan
+    displayName: 'Trivy Image Scan'
+    dependsOn: OWASPDependencyCheck
+    jobs:
+      - job: ImageScan
+        displayName: 'Scan Container Image with Trivy'
+        steps:
+          - task: Docker@2
+            inputs:
+              containerRegistry: '$(containerRegistry)'
+              command: 'login'
+          - script: |
+              sudo apt-get update
+              sudo apt-get install -y wget
+              wget https://github.com/aquasecurity/trivy/releases/download/v0.33.0/trivy_0.33.0_Linux-64bit.deb
+              sudo dpkg -i trivy_0.33.0_Linux-64bit.deb
+          - script: |
+              trivy image --exit-code 0 --severity CRITICAL,HIGH,LOW --format json --output $(Build.ArtifactStagingDirectory)/image-sbom.json $(containerRegistry)/$(imageName):$(Build.BuildId)
+          - script: |
+              curl -X POST -H "Authorization: Token $(defectDojoToken)" \
+                   -F 'scan_type=Trivy Image Scan' \
+                   -F "file=@$(Build.ArtifactStagingDirectory)/image-sbom.json" \
+                   -F "engagement=$(engagementIdTrivyImage)" \
+                   -F 'active=true' \
+                   -F 'verified=true' \
+                   "$(defectDojoUrl)"
+          - task: AzureCLI@2
+            inputs:
+              azureSubscription: 'az-storageaccount-access-test'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az storage blob upload \
+                  --account-name viswajithcloudshellsa \
+                  --container-name test \
+                  --file $(Build.ArtifactStagingDirectory)/image-sbom.json \
+                  --name image-sbom.json \
+                  --overwrite \
+                  --connection-string $(AZURE_STORAGE_CONNECTION_STRING)
